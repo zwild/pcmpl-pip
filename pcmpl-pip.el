@@ -34,7 +34,8 @@
 (require 'pcomplete)
 
 (defgroup pcmpl-pip nil
-  "Pcomplete for pip")
+  "Pcomplete for pip"
+  :group 'pcomplete)
 
 (defcustom pcmpl-pip-cache-file "~/.pip/pip-cache"
   "Location of pip cache file."
