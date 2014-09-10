@@ -115,4 +115,6 @@
       (while (pcomplete-here (pcmpl-pip-all))))
      (t (while (pcomplete-here (pcomplete-entries)))))))
 
+(provide 'pcmpl-pip)
+
 ;;; pcmpl-pip.el ends here
