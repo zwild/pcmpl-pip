@@ -3,7 +3,7 @@
 ;; Copyright (C) 2014 Wei Zhao
 ;; Author: Wei Zhao <kaihaosw@gmail.com>
 ;; Git: https://github.com/kaihaosw/pcmpl-pip.git
-;; Version: 0.1
+;; Version: 0.2
 ;; Created: 2014-09-10
 ;; Keywords: pcomplete, pip, python, tools
 
@@ -29,6 +29,7 @@
 ;;; Commentary:
 
 ;; Pcomplete for pip.
+;; Based on pip 1.5.6 docs.
 
 ;;; Code:
 (require 'pcomplete)
@@ -73,22 +74,90 @@
   (pcmpl-pip-clean-cache)
   (pcmpl-pip-create-index))
 
-(defconst pcmpl-pip-commands
-  '("install" "uninstall" "freeze" "list" "show"
-    "search" "wheel" "zip" "unzip" "bundle" "help"))
-
+;;
 (defconst pcmpl-pip-general-options
   '("-h" "--help" "-v" "--verbose" "-V" "--version"
     "-q" "--quiet" "--log-file" "--log" "--proxy"
     "--timeout" "--exists-action" "--cert"))
 
+(defconst pcmpl-pip-options
+  '(("install" . (("-e" "--editable"
+                   "-r" "--requirement"
+                   "-b" "--build"
+                   "-t" "--target"
+                   "-d" "--download"
+                   "--download-cache" "--src"
+                   "-U" "--upgrade"
+                   "--force-reinstall"
+                   "-I" "--ignore-installed"
+                   "--no-deps"
+                   "--no-install"
+                   "--no-download"
+                   "--install-option"
+                   "--global-option"
+                   "--user"
+                   "--egg"
+                   "--root"
+                   "--compile"
+                   "--no-compile"
+                   "--no-use-wheel"
+                   "--pre"
+                   "--no-clean"
+                   "-i" "--index-url"
+                   "--extra-index-url"
+                   "--no-index"
+                   "-f" "--find-links"
+                   "--allow-external"
+                   "--allow-all-external"
+                   "--allow-unverified"
+                   "--process-dependency-links")))
+    ("uninstall" . (("-r" "--requirement"
+                     "-y" "--yes")))
+    ("freeze" . (("-f" "--find-links"
+                  "-l" "--local")))
+    ("list" . (("-o" "--outdated"
+                "-u" "--uptodate"
+                "-e" "--editable"
+                "-l" "--local"
+                "--pre"
+                "-i" "--index-url"
+                "--extra-index-url"
+                "--no-index"
+                "-f" "--find-links"
+                "--allow-external"
+                "--allow-all-external"
+                "--allow-unverified"
+                "--process-dependency-links")))
+    ("show" . (("-f" "--files")))
+    ("search" . (("--index")))
+    ("wheel" . (("-w" "--wheel-dir"
+                 "--no-use-wheel"
+                 "--build-option"
+                 "-r" "--requirement"
+                 "--download-cache"
+                 "--no-deps"
+                 "-b" "--build"
+                 "--global-option"
+                 "--pre"
+                 "--no-clean"
+                 "-i" "--index-url"
+                 "--extra-index-url"
+                 "--no-index"
+                 "-f" "--find-links"
+                 "--allow-external"
+                 "--allow-all-external"
+                 "--allow-unverified"
+                 "--process-dependency-links")))))
+
+(defun pcmpl-pip-command-options (command)
+  (cadr (assoc command pcmpl-pip-options)))
+
+;;
 (defconst pcmpl-pip-global-commands
   '("install" "search"))
 
 (defconst pcmpl-pip-local-commands
   '("uninstall" "show"))
-
-;; TODO command options
 
 (defun pcmpl-pip-all ()
   "All packages."
@@ -100,20 +169,29 @@
   "All installed packages."
   (split-string (shell-command-to-string "pip freeze | cut -d '=' -f 1")))
 
+
 ;;;###autoload
 (defun pcomplete/pip ()
-  (let ((cmd (nth 1 pcomplete-args)))
+  (let* ((cmd (nth 1 pcomplete-args))
+         (options (pcmpl-pip-command-options cmd)))
     (unless (file-exists-p pcmpl-pip-cache-file)
       (pcmpl-pip-create-index))
-    (pcomplete-here* pcmpl-pip-commands)
-    (while (pcomplete-match "^-" 0)
-      (pcomplete-here* pcmpl-pip-general-options))
-    (cond
-     ((member cmd pcmpl-pip-local-commands)
-      (while (pcomplete-here (pcmpl-pip-installed))))
-     ((member cmd pcmpl-pip-global-commands)
-      (while (pcomplete-here (pcmpl-pip-all))))
-     (t (while (pcomplete-here (pcomplete-entries)))))))
+    (if (pcomplete-match "^-" 0)
+        (pcomplete-here pcmpl-pip-general-options)
+      (pcomplete-here* (mapcar 'car pcmpl-pip-options)))
+    (dolist (command (mapcar 'car pcmpl-pip-options))
+      (when (string= cmd command)
+        (while
+            (cond
+             ((or (pcomplete-match "^--requirement" 0)
+                  (pcomplete-match "^-r" 0))
+              (while (pcomplete-here (pcomplete-entries))))
+             ((pcomplete-match "^-" 0)
+              (pcomplete-here options))
+             ((member cmd pcmpl-pip-global-commands)
+              (pcomplete-here (pcmpl-pip-all)))
+             ((member cmd pcmpl-pip-local-commands)
+              (pcomplete-here (pcmpl-pip-installed)))))))))
 
 (provide 'pcmpl-pip)
 
