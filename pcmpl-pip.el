@@ -3,7 +3,7 @@
 ;; Copyright (C) 2014 Wei Zhao
 ;; Author: Wei Zhao <kaihaosw@gmail.com>
 ;; Git: https://github.com/kaihaosw/pcmpl-pip.git
-;; Version: 0.2
+;; Version: 0.3
 ;; Created: 2014-09-10
 ;; Keywords: pcomplete, pip, python, tools
 
@@ -172,26 +172,25 @@
 
 ;;;###autoload
 (defun pcomplete/pip ()
-  (let* ((cmd (nth 1 pcomplete-args))
-         (options (pcmpl-pip-command-options cmd)))
+  (let ((command (nth 1 pcomplete-args))
+        (commands (mapcar 'car pcmpl-pip-options)))
     (unless (file-exists-p pcmpl-pip-cache-file)
       (pcmpl-pip-create-index))
     (if (pcomplete-match "^-" 0)
         (pcomplete-here pcmpl-pip-general-options)
-      (pcomplete-here* (mapcar 'car pcmpl-pip-options)))
-    (dolist (command (mapcar 'car pcmpl-pip-options))
-      (when (string= cmd command)
-        (while
-            (cond
-             ((or (pcomplete-match "^--requirement" 0)
-                  (pcomplete-match "^-r" 0))
-              (while (pcomplete-here (pcomplete-entries))))
-             ((pcomplete-match "^-" 0)
-              (pcomplete-here options))
-             ((member cmd pcmpl-pip-global-commands)
-              (pcomplete-here (pcmpl-pip-all)))
-             ((member cmd pcmpl-pip-local-commands)
-              (pcomplete-here (pcmpl-pip-installed)))))))))
+      (pcomplete-here* commands))
+    (when (member command commands)
+      (while
+          (cond
+           ((or (pcomplete-match "^--requirement" 0)
+                (pcomplete-match "^-r" 0))
+            (while (pcomplete-here (pcomplete-entries))))
+           ((pcomplete-match "^-" 0)
+            (pcomplete-here (pcmpl-pip-command-options command)))
+           ((member command pcmpl-pip-global-commands)
+            (pcomplete-here (pcmpl-pip-all)))
+           ((member command pcmpl-pip-local-commands)
+            (pcomplete-here (pcmpl-pip-installed))))))))
 
 (provide 'pcmpl-pip)
 
