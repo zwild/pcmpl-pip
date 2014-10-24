@@ -3,7 +3,7 @@
 ;; Copyright (C) 2014 Wei Zhao
 ;; Author: Wei Zhao <kaihaosw@gmail.com>
 ;; Git: https://github.com/kaihaosw/pcmpl-pip.git
-;; Version: 0.3
+;; Version: 0.4
 ;; Created: 2014-09-10
 ;; Keywords: pcomplete, pip, python, tools
 
@@ -152,6 +152,9 @@
 (defun pcmpl-pip-command-options (command)
   (cadr (assoc command pcmpl-pip-options)))
 
+(defconst pcmpl-pip-commands
+  (cons "help" (mapcar 'car pcmpl-pip-options)))
+
 ;;
 (defconst pcmpl-pip-global-commands
   '("install" "search"))
@@ -161,9 +164,7 @@
 
 (defun pcmpl-pip-all ()
   "All packages."
-  (with-temp-buffer
-    (insert-file-contents pcmpl-pip-cache-file)
-    (split-string (buffer-string))))
+  (split-string (shell-command-to-string (concat "cat " pcmpl-pip-cache-file))))
 
 (defun pcmpl-pip-installed ()
   "All installed packages."
@@ -173,24 +174,30 @@
 ;;;###autoload
 (defun pcomplete/pip ()
   (let ((command (nth 1 pcomplete-args))
-        (commands (mapcar 'car pcmpl-pip-options)))
+        (all-packages (pcmpl-pip-all))
+        (all-installed (pcmpl-pip-installed)))
     (unless (file-exists-p pcmpl-pip-cache-file)
       (pcmpl-pip-create-index))
     (if (pcomplete-match "^-" 0)
         (pcomplete-here pcmpl-pip-general-options)
-      (pcomplete-here* commands))
-    (when (member command commands)
+      (pcomplete-here* pcmpl-pip-commands))
+    (when (member command pcmpl-pip-commands)
       (while
           (cond
            ((or (pcomplete-match "^--requirement" 0)
                 (pcomplete-match "^-r" 0))
             (while (pcomplete-here (pcomplete-entries))))
+           ((or (pcomplete-match "^-U" 0)
+                (pcomplete-match "^--upgrade" 0))
+            (while (pcomplete-here all-installed)))
            ((pcomplete-match "^-" 0)
             (pcomplete-here (pcmpl-pip-command-options command)))
+           ((string= command "help")
+            (pcomplete-here pcmpl-pip-commands))
            ((member command pcmpl-pip-global-commands)
-            (pcomplete-here (pcmpl-pip-all)))
+            (pcomplete-here all-packages))
            ((member command pcmpl-pip-local-commands)
-            (pcomplete-here (pcmpl-pip-installed))))))))
+            (pcomplete-here all-installed)))))))
 
 (provide 'pcmpl-pip)
 
