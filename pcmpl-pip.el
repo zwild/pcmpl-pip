@@ -3,8 +3,10 @@
 ;; Copyright (C) 2014-2017 Wei Zhao
 ;; Author: Wei Zhao <kaihaosw@gmail.com>
 ;; Git: https://github.com/kaihaosw/pcmpl-pip.git
-;; Version: 0.4
+;; Package-Requires: ((s "1.12.0") (f "0.19.0") (seq "2.15"))
+;; Version: 0.5
 ;; Created: 2014-09-10
+;; Time-stamp: <2017-12-01 16:08>
 ;; Keywords: pcomplete, pip, python, tools
 
 ;; This file is NOT part of GNU Emacs.
@@ -28,20 +30,37 @@
 
 ;;; Commentary:
 
-;; Pcomplete for pip.
-;; Based on pip 1.5.6 docs.
+;; Pcomplete for python and pip.
+;; Based on pip 9.0.1 docs.
 
 ;;; Code:
+(provide 'pcmpl-pip)
+
 (require 'pcomplete)
 
 (defgroup pcmpl-pip nil
   "Pcomplete for pip"
   :group 'pcomplete)
 
-(defcustom pcmpl-pip-cache-file "~/.pip/pip-cache"
+(defcustom pcmpl-pip-command "pip3"
+  "pip2 or pip3"
+  :group 'pcmpl-pip
+  :type 'string)
+
+(defcustom pcmpl-pip-use-cache t
+  "Cache packages for speed."
+  :group 'pcmpl-pip
+  :type 'boolean)
+
+(defcustom pcmpl-pip-cache-file "~/.pip/zsh-cache"
   "Location of pip cache file."
   :group 'pcmpl-pip
   :type 'string)
+
+(defcustom pcmpl-pip-complete-package-min-length 3
+  "The minimum length of package name when needed to complete."
+  :group 'pcmpl-pip
+  :type 'number)
 
 (defconst pcmpl-pip-index-url "https://pypi.python.org/simple/")
 
@@ -74,130 +93,133 @@
   (pcmpl-pip-clean-cache)
   (pcmpl-pip-create-index))
 
-;;
-(defconst pcmpl-pip-general-options
-  '("-h" "--help" "-v" "--verbose" "-V" "--version"
-    "-q" "--quiet" "--log-file" "--log" "--proxy"
-    "--timeout" "--exists-action" "--cert"))
+;; utils
+(defun pcmpl-pip-complete-flags (flags-- &optional flags-)
+  (while (cond
+          ((pcomplete-match "^--" 0) (pcomplete-here flags--))
+          ((pcomplete-match "^-" 0) (pcomplete-here flags-)))))
 
-(defconst pcmpl-pip-options
-  '(("install" . (("-e" "--editable"
-                   "-r" "--requirement"
-                   "-b" "--build"
-                   "-t" "--target"
-                   "-d" "--download"
-                   "--download-cache" "--src"
-                   "-U" "--upgrade"
-                   "--force-reinstall"
-                   "-I" "--ignore-installed"
-                   "--no-deps"
-                   "--no-install"
-                   "--no-download"
-                   "--install-option"
-                   "--global-option"
-                   "--user"
-                   "--egg"
-                   "--root"
-                   "--compile"
-                   "--no-compile"
-                   "--no-use-wheel"
-                   "--pre"
-                   "--no-clean"
-                   "-i" "--index-url"
-                   "--extra-index-url"
-                   "--no-index"
-                   "-f" "--find-links"
-                   "--allow-external"
-                   "--allow-all-external"
-                   "--allow-unverified"
-                   "--process-dependency-links")))
-    ("uninstall" . (("-r" "--requirement"
-                     "-y" "--yes")))
-    ("freeze" . (("-f" "--find-links"
-                  "-l" "--local")))
-    ("list" . (("-o" "--outdated"
-                "-u" "--uptodate"
-                "-e" "--editable"
-                "-l" "--local"
-                "--pre"
-                "-i" "--index-url"
-                "--extra-index-url"
-                "--no-index"
-                "-f" "--find-links"
-                "--allow-external"
-                "--allow-all-external"
-                "--allow-unverified"
-                "--process-dependency-links")))
-    ("show" . (("-f" "--files")))
-    ("search" . (("--index")))
-    ("wheel" . (("-w" "--wheel-dir"
-                 "--no-use-wheel"
-                 "--build-option"
-                 "-r" "--requirement"
-                 "--download-cache"
-                 "--no-deps"
-                 "-b" "--build"
-                 "--global-option"
-                 "--pre"
-                 "--no-clean"
-                 "-i" "--index-url"
-                 "--extra-index-url"
-                 "--no-index"
-                 "-f" "--find-links"
-                 "--allow-external"
-                 "--allow-all-external"
-                 "--allow-unverified"
-                 "--process-dependency-links")))))
+(defun pcmpl-commands-without-dash ()
+  (seq-filter
+   (lambda (s) (not (s-starts-with? "-" s)))
+   pcomplete-args))
 
-(defun pcmpl-pip-command-options (command)
-  (cadr (assoc command pcmpl-pip-options)))
+(defun pcmpl-contains-options (option)
+  (seq-find (lambda (s) (string= s option)) pcomplete-args))
+
+(defconst pcmpl-pip-all-packages
+  (if (file-exists-p pcmpl-pip-cache-file)
+      (split-string (shell-command-to-string (concat "cat " pcmpl-pip-cache-file)))
+    '()))
+
+(defun pcmpl-pip-complete-all-packages ()
+  (while
+      (when (>= (length (pcomplete-arg 'last))
+                pcmpl-pip-complete-package-min-length)
+        (pcomplete-here pcmpl-pip-all-packages))))
+
+(defun pcmpl-pip-installed-packages ()
+  "All installed packages."
+  (split-string (shell-command-to-string
+                 (format "%s freeze | cut -d '=' -f 1"
+                         pcmpl-pip-command))))
+
+;; options
+(defconst pcmpl-python-options
+  '("-b" "-B" "-c" "-d" "-E" "-h" "-i" "-I" "-m" "-O"
+    "-OO" "-q" "-s" "-S" "-u" "-v" "-V" "-W" "-x" "-X"))
+
+(defconst pcmpl-pip-general-options--
+  '("--help" "--isolated" "--verbose" "--version" "--quiet"
+    "--log" "--proxy" "--retries" "--timeout" "--exists-action"
+    "--trusted-host" "--cert" "--client-cert" "--cache-dir"
+    "--no-cache-dir" "--disable-pip-version-check"))
 
 (defconst pcmpl-pip-commands
-  (cons "help" (mapcar 'car pcmpl-pip-options)))
+  '("install" "download" "uninstall" "freeze" "list" "show"
+    "check" "search" "wheel" "hash" "completion" "help"))
 
-;;
-(defconst pcmpl-pip-global-commands
-  '("install" "search"))
+(defconst pcmpl-pip-install-options--
+  '("--constraint" "--editable" "--requirement" "--build"
+    "--target" "--download" "--src" "--upgrade" "--upgrade-strategy"
+    "--force-reinstall" "--ignore-installed" "--ignore-requires-python"
+    "--no-deps" "--install-option" "--global-option" "--user""--egg"
+    "--root" "--prefix" "--compile" "--no-compile" "--no-use-wheel"
+    "--no-binary" "--only-binary" "--pre" "--no-clean" "--require-hashes"))
 
-(defconst pcmpl-pip-local-commands
-  '("uninstall" "show"))
+(defconst pcmpl-pip-install-options-
+  '("-c" "-e" "-r" "-b" "-t" "-d" "-U" "-I"))
 
-(defun pcmpl-pip-all ()
-  "All packages."
-  (split-string (shell-command-to-string (concat "cat " pcmpl-pip-cache-file))))
+(defconst pcmpl-pip-download-options--
+  '("--constraint" "--editable" "--requirement" "--build"
+    "--no-deps" "--global-option" "--no-binary" "--only-binary"
+    "--src" "--pre" "--no-clean" "--require-hashes" "--dest"
+    "--platform" "--python-version" "--implementation" "--abi"
+    "--index-url" "--extra-index-url" "--no-index"
+    "--find-links" "--process-dependency-links"))
 
-(defun pcmpl-pip-installed ()
-  "All installed packages."
-  (split-string (shell-command-to-string "pip freeze | cut -d '=' -f 1")))
+(defconst pcmpl-pip-download-options-
+  '("-c" "-e" "-r" "-b" "-d" "-i" "-f"))
 
+(defconst pcmpl-pip-list-options--
+  '("--outdated" "--uptodate" "--editable" "--local"
+    "--user" "--pre" "--format" "--not-required"))
+
+(defconst pcmpl-pip-wheel-options--
+  '("--wheel-dir" "--no-use-wheel" "--no-binary" "--only-binary"
+    "--build-option" "--constraint" "--editable" "--requirement"
+    "--src" "--ignore-requires-python" "--no-deps" "--build"
+    "--global-option" "--pre" "--no-clean" "--require-hashes"))
+
+(defconst pcmpl-pip-wheel-options-
+  '("-w" "-c" "-e" "-r" "-b"))
+
+;;;###autoload
+(defun pcomplete/python ()
+  (pcmpl-pip-complete-flags nil pcmpl-python-options)
+  (pcomplete-here (pcomplete-entries)))
 
 ;;;###autoload
 (defun pcomplete/pip ()
-  (let ((command (nth 1 pcomplete-args))
-        (all-packages (pcmpl-pip-all))
-        (all-installed (pcmpl-pip-installed)))
-    (unless (file-exists-p pcmpl-pip-cache-file)
+  (let ((command (nth 1 (pcmpl-commands-without-dash))))
+    (when (and pcmpl-pip-use-cache
+               (not (file-exists-p pcmpl-pip-cache-file)))
       (pcmpl-pip-create-index))
-    (if (pcomplete-match "^-" 0)
-        (pcomplete-here pcmpl-pip-general-options)
-      (pcomplete-here* pcmpl-pip-commands))
-    (when (member command pcmpl-pip-commands)
-      (while
-          (cond
-           ((or (pcomplete-match "^--requirement" 0)
-                (pcomplete-match "^-r" 0))
-            (while (pcomplete-here (pcomplete-entries))))
-           ((or (pcomplete-match "^-U" 0)
-                (pcomplete-match "^--upgrade" 0))
-            (while (pcomplete-here all-installed)))
-           ((pcomplete-match "^-" 0)
-            (pcomplete-here (pcmpl-pip-command-options command)))
-           ((string= command "help")
-            (pcomplete-here pcmpl-pip-commands))
-           ((member command pcmpl-pip-global-commands)
-            (pcomplete-here all-packages))
-           ((member command pcmpl-pip-local-commands)
-            (pcomplete-here all-installed)))))))
+    (pcmpl-pip-complete-flags pcmpl-pip-general-options-- '("-h" "-v" "-V" "-q"))
+    (pcomplete-here pcmpl-pip-commands)
+    (cond ((string= command "install")
+           (pcmpl-pip-complete-flags pcmpl-pip-install-options-- pcmpl-pip-install-options-)
+           (when (or (pcmpl-contains-options "-U") (pcmpl-contains-options "--upgrade"))
+             (while (pcomplete-here (pcmpl-pip-installed-packages))))
+           (pcmpl-pip-complete-all-packages)
+           (pcomplete-here (pcomplete-entries)))
+          ((string= command "download")
+           (pcmpl-pip-complete-flags pcmpl-pip-download-options-- pcmpl-pip-download-options-)
+           (pcomplete-here (pcomplete-entries)))
+          ((string= command "uninstall")
+           (pcmpl-pip-complete-flags '("--requirement" "--yes") '("-r" "-y"))
+           (when (or (pcmpl-contains-options "-r") (pcmpl-contains-options "--requirement"))
+             (pcomplete-here (pcomplete-entries)))
+           (while (pcomplete-here (pcmpl-pip-installed-packages))))
+          ((string= command "freeze")
+           (pcmpl-pip-complete-flags '("--requirement" "--find-links" "--local" "--user" "--all")
+                                     '("-r" "-f" "-l"))
+           (pcomplete-here (pcomplete-entries)))
+          ((string= command "list")
+           (pcmpl-pip-complete-flags pcmpl-pip-list-options-- '("-o" "-u" "-e" "-l")))
+          ((string= command "show")
+           (pcmpl-pip-complete-flags '("--files") '("-f"))
+           (while (pcomplete-here (pcmpl-pip-installed-packages))))
+          ((string= command "search")
+           (pcmpl-pip-complete-flags '("--index") '("-i")))
+          ((string= command "wheel")
+           (pcmpl-pip-complete-flags pcmpl-pip-wheel-options-- pcmpl-pip-wheel-options-)
+           (pcomplete-here (pcomplete-entries)))
+          ((string= command "hash")
+           (pcmpl-pip-complete-flags '("--algorithm") '("-a"))
+           (pcomplete-here '("sha256" "sha384" "sha512")))
+          ((string= command "help")
+           (pcomplete-here pcmpl-pip-commands)))))
 
 ;;;###autoload
 (defalias 'pcomplete/pip2 'pcomplete/pip)
@@ -205,6 +227,8 @@
 ;;;###autoload
 (defalias 'pcomplete/pip3 'pcomplete/pip)
 
-(provide 'pcmpl-pip)
+;;;###autoload
+(defalias 'pcomplete/python3 'pcomplete/python)
 
 ;;; pcmpl-pip.el ends here
+
