@@ -1,8 +1,8 @@
 ;;; pcmpl-pip.el --- pcomplete for pip
 
-;; Copyright (C) 2014-2017 Wei Zhao
-;; Author: Wei Zhao <kaihaosw@gmail.com>
-;; Git: https://github.com/kaihaosw/pcmpl-pip.git
+;; Copyright (C) 2014-2019 Wei Zhao
+;; Author: zwild <judezhao@outlook.com>
+;; Git: https://github.com/zwild/pcmpl-pip.git
 ;; Package-Requires: ((s "1.12.0") (f "0.19.0") (seq "2.15"))
 ;; Version: 0.5
 ;; Created: 2014-09-10
@@ -231,4 +231,3 @@
 (defalias 'pcomplete/python3 'pcomplete/python)
 
 ;;; pcmpl-pip.el ends here
-
