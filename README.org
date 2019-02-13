@@ -1,5 +1,7 @@
 * Introduction
   Pcomplete for python and pip.
 
+  [[https://melpa.org/#/pcmpl-pip][file:https://melpa.org/packages/pcmpl-pip-badge.svg]]
+
 * Screenshot
   [[./screenshot.png]]
